@@ -1,11 +1,11 @@
 package gaddam1987.github.persistance;
 
 
-import com.microsoft.sqlserver.jdbc.SQLServerDataSource;
+import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.health.HealthCheckRegistry;
 import com.zaxxer.hikari.HikariDataSource;
-import net.ttddyy.dsproxy.ExecutionInfo;
-import net.ttddyy.dsproxy.QueryInfo;
-import net.ttddyy.dsproxy.listener.QueryExecutionListener;
+import gaddam1987.github.persistance.entity.Customer;
 import net.ttddyy.dsproxy.support.ProxyDataSourceBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,74 +18,66 @@ import org.springframework.dao.annotation.PersistenceExceptionTranslationPostPro
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
 import org.springframework.orm.hibernate4.HibernateTransactionManager;
 import org.springframework.orm.hibernate4.LocalSessionFactoryBean;
-import org.springframework.orm.jpa.JpaTransactionManager;
-import org.springframework.orm.jpa.JpaVendorAdapter;
-import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
-import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
-import org.springframework.transaction.jta.JtaTransactionManager;
-import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
 import javax.sql.DataSource;
 import java.io.IOException;
-import java.util.List;
+import java.io.InputStream;
 import java.util.Properties;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
+import static java.lang.System.setProperty;
 import static org.mockito.Mockito.mock;
 import static org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType.H2;
 
 @Configuration
 @ComponentScan("gaddam1987.github.persistance")
 @EnableTransactionManagement
-//@EnableWebMvc
 public class PersistenceConfig {
-
-    static {
-        System.setProperty("org.jboss.logging.provider", "slf4j");
-    }
-
     private static final Logger logger = LoggerFactory.getLogger(PersistenceConfig.class);
 
-    /**
-     * @Bean LocalContainerEntityManagerFactoryBean entityManagerFactory() {
-     * LocalContainerEntityManagerFactoryBean em = new LocalContainerEntityManagerFactoryBean();
-     * em.setDataSource(dataSource());
-     * em.setPackagesToScan("gaddam1987.github.persistance.entity");
-     * <p>
-     * JpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
-     * em.setJpaVendorAdapter(vendorAdapter);
-     * em.setJpaProperties(additionalProperties());
-     * return em;
-     * }
-     **/
+    static {
+        setProperty("org.jboss.logging.provider", "slf4j");
+    }
+
+//    @Bean
+//    LocalContainerEntityManagerFactoryBean entityManagerFactory() {
+//        LocalContainerEntityManagerFactoryBean em = new LocalContainerEntityManagerFactoryBean();
+//        em.setDataSource(dataSource());
+//        em.setPackagesToScan("gaddam1987.github.persistance.entity");
+//        JpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
+//        em.setJpaVendorAdapter(vendorAdapter);
+//        em.setJpaProperties(additionalProperties());
+//        return em;
+//    }
 
     @Bean
-    LocalSessionFactoryBean localSessionFactoryBean(DataSource dataSource) {
-        LocalSessionFactoryBean sessionFactoryBean = new LocalSessionFactoryBean();
-        sessionFactoryBean.setDataSource(dataSource);
-        sessionFactoryBean.setPackagesToScan("gaddam1987.github.persistance.entity");
-        sessionFactoryBean.setHibernateProperties(additionalProperties());
-        return sessionFactoryBean;
+    LocalSessionFactoryBean sessionFactoryBean() {
+        LocalSessionFactoryBean sessionFactory = new LocalSessionFactoryBean();
+        sessionFactory.setDataSource(dataSource());
+        sessionFactory.setPackagesToScan("gaddam1987.github.persistance.entity");
+        sessionFactory.setHibernateProperties(additionalProperties());
+        return sessionFactory;
     }
 
     @Bean
     public DataSource dataSource() {
-        /**
-         SQLServerDataSource sqlServerDataSource = new SQLServerDataSource();
-         **/
-
         HikariDataSource dataSource = new HikariDataSource();
-        /**
-         dataSource.setJdbcUrl("");
-         dataSource.setUsername("");
-         dataSource.setPassword("");
-         **/
+        dataSource.setJdbcUrl("jdbc:sqlserver://vaapdb1.database.secure.windows.net:1433;databaseName=vaap1db");
+
+        dataSource.setUsername("sa");
+        dataSource.setPassword("Ganesh@123");
         dataSource.setDataSource(new EmbeddedDatabaseBuilder().setType(H2).build());
         dataSource.setMaximumPoolSize(30);
         dataSource.setConnectionTimeout(1000);
-        //dataSource.setLeakDetectionThreshold(3000);
+        dataSource.setLeakDetectionThreshold(3000);
         dataSource.setConnectionInitSql("select 1");
+        dataSource.setHealthCheckRegistry(healthCheckRegistry());
+        dataSource.setMetricRegistry(metricRegistry());
+        dataSource.setRegisterMbeans(true);
+        dataSource.addHealthCheckProperty("expected99thPercentileMs", "10");
 
         return ProxyDataSourceBuilder
                 .create(dataSource)
@@ -95,11 +87,20 @@ public class PersistenceConfig {
     }
 
     @Bean
-    public PlatformTransactionManager transactionManager(DataSource dataSource) {
-        JtaTransactionManager jtaTransactionManager = new JtaTransactionManager();
+    MetricRegistry metricRegistry() {
+        return new MetricRegistry();
+    }
 
+    @Bean
+    HealthCheckRegistry healthCheckRegistry() {
+        return new HealthCheckRegistry();
+    }
+
+    @Bean
+    public PlatformTransactionManager transactionManager() {
         HibernateTransactionManager transactionManager = new HibernateTransactionManager();
-        transactionManager.setSessionFactory(localSessionFactoryBean(dataSource).getObject());
+        transactionManager.setDataSource(dataSource());
+        transactionManager.setSessionFactory(sessionFactoryBean().getObject());
         return transactionManager;
     }
 
@@ -111,8 +112,7 @@ public class PersistenceConfig {
     private Properties additionalProperties() {
         Properties properties = new Properties();
         properties.setProperty("hibernate.hbm2ddl.auto", "create");
-        properties.setProperty("hibernate.dialect", "org.hibernate.dialect.SQLServer2012Dialect");
-        //properties.setProperty("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
+        properties.setProperty("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
         properties.setProperty("hibernate.show_sql", "true");
         properties.setProperty("hibernate.format_sql", "true");
         properties.setProperty("hibernate.use_sql_comments", "true");
@@ -129,6 +129,23 @@ public class PersistenceConfig {
         ApplicationContext applicationContext =
                 new AnnotationConfigApplicationContext(PersistenceConfig.class);
 
-        System.in.read();
+        ParentService bean = applicationContext.getBean(ParentService.class);
+        MetricRegistry metricRegistry = applicationContext.getBean(MetricRegistry.class);
+        HealthCheckRegistry healthCheckRegistry = applicationContext.getBean(HealthCheckRegistry.class);
+        JmxReporter reporter = JmxReporter
+                .forRegistry(metricRegistry)
+                .convertRatesTo(TimeUnit.SECONDS)
+                .convertDurationsTo(TimeUnit.MILLISECONDS)
+                .build();
+
+        reporter.start();
+
+        Executors.newFixedThreadPool(5).submit(() -> {
+            bean.createCustomer(new Customer("Naresh", "Reddy"));
+
+        });
+        InputStream in = System.in;
+
+        in.read();
     }
 }

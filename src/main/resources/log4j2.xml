@@ -6,10 +6,11 @@
         </Console>
     </Appenders>
     <Loggers>
-        <Root level="info">
+        <Root level="warn">
             <AppenderRef ref="Console"/>
         </Root>
-        <Logger name="org.hibernate" level="debug"/>
-        <Logger name="net.ttddyy" level="debug"/>
+        <Logger name="org.hibernate" level="warn"/>
+        <Logger name="net.ttddyy" level="warn"/>
+        <Logger name="com.zaxxer" level="debug"/>
     </Loggers>
 </Configuration>

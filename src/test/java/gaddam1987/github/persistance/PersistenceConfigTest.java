@@ -24,14 +24,12 @@ public class PersistenceConfigTest {
     }
 
     @Configuration
-    @Import({PersistenceConfig.class, H2WebView.class})
+    @Import({PersistenceConfig.class})
     static class TestConfiguration {
-
         @Bean
         public PlayingService playingService() {
             return mock(PlayingService.class);
         }
-
     }
 
 }
